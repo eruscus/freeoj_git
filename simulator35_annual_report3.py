@@ -253,7 +253,7 @@ def get_optimal_parameters(product, region, month, slope, intercept):
     
     # if any negative values, don't try to provide demand there        
     if ((price < 0.0) | (quantity < 0.0) | (profit < 0.0) | math.isnan(slope) | math.isnan(intercept)):
-        price = 4.0     #maximum price
+        price = 4.0*2000     #maximum price
         quantity = 0.0
         profit = 0.0
     
