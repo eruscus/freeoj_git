@@ -253,7 +253,7 @@ def get_optimal_parameters(product, region, month, slope, intercept):
     
     # if any negative values, don't try to provide demand there        
     if ((price < 0.0) | (quantity < 0.0) | (profit < 0.0) | math.isnan(slope) | math.isnan(intercept)):
-        price = 0.0
+        price = 4.0     #maximum price
         quantity = 0.0
         profit = 0.0
     
@@ -261,6 +261,9 @@ def get_optimal_parameters(product, region, month, slope, intercept):
     past_points = get_past_points(product)
     price_index = region + ':Price'
     quantity_index = region + ':Demand'
+    
+    year_used = 2017
+
     for i in range(1,13):
         col = month + str(i)
         price2 = past_points.loc[price_index, col] * 2000 # lbs -> tons
@@ -271,8 +274,14 @@ def get_optimal_parameters(product, region, month, slope, intercept):
             price = price2
             quantity = quantity2
             profit = profit2    
+            year_used = 2005+i
+
         
     price = price / 2000 # tons -> lbs
+    
+    # debugging statement: see how many regions/months rely on previous data over demand curves
+    print 'Month: ' + month + ', Region: ' + region + ', Year Used = ' + str(year_used) + ', Price = ' + str(price)
+
     
     parameters = [product, region, month, grove, plant, storage, transporter, 
                   price, quantity, profit]
@@ -281,7 +290,7 @@ def get_optimal_parameters(product, region, month, slope, intercept):
 
 # return cheapest path from purchase to delivery
 def get_optimal_path(product, region, month):
-    transporter = 'IC' # for now no tankers available
+    transporter = 'TC' # for now no tankers available
     storage = get_closest_storage(region)
     
     min_cost = float('inf')
