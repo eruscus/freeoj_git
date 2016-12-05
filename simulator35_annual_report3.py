@@ -344,12 +344,23 @@ def get_transportation_cost(product, region, grove, plant, storage, transporter)
     # if Grove in USA, transport from grove
     elif (grove in ['FLA','CAL','TEX','ARZ']):
         cost_G_to_P = G_P.loc[plant, grove] * .22
-        cost_P_to_S = P_S.loc[storage, plant] * .65
+        
+        if (transporter == 'IC'):
+            cost_P_to_S = P_S.loc[storage, plant] * .65
+        else:
+            cost_P_to_S = P_S.loc[storage, plant] * 1.2
+
         cost_G_to_S = 0
     # if Grove NOT in USA, transport from FLA
     elif (grove in ['BRA','SPA']):
         cost_G_to_P = G_P.loc[plant, 'FLA'] * .22
-        cost_P_to_S = P_S.loc[storage, plant] * .65
+        
+
+        if (transporter == 'IC'):
+            cost_P_to_S = P_S.loc[storage, plant] * .65
+        else:
+            cost_P_to_S = P_S.loc[storage, plant] * 1.2
+
         cost_G_to_S = 0
     
     cost_S_to_M = S_M.loc[region, storage] * 1.2  
