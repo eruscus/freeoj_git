@@ -201,9 +201,9 @@ def get_decisions():
         quantity = parameters.loc[i, 'Quantity']
         
         full = False
-#        for l in locations:
-#            if (capacity.loc[l, month] + quantity > max_capacities.loc[l, 'Max_Capacity']):
-#                full = True
+        for l in locations:
+            if (capacity.loc[l, month] + quantity > max_capacities.loc[l, 'Max_Capacity']):
+                full = True
         
         if (full == False):
             update_decisions(parameters, i)
