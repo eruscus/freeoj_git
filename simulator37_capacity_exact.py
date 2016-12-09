@@ -273,7 +273,7 @@ def get_optimal_parameters(product, region, month, slope, intercept):
     for i in range(1,13):
         col = month + str(i)
         price2 = past_points.loc[price_index, col] * 2000 # lbs -> tons
-        quantity2 = past_points.loc[quantity_index, col]
+        quantity2 = past_points.loc[quantity_index, col] / 4
         profit2 = quantity2 * (price2 - path_cost)
         
         if (profit2 > profit):
