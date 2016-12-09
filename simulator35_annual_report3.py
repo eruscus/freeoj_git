@@ -230,15 +230,15 @@ def get_list_of_choices():
                     
 # return optimal path, price, and quantity for a product/region/month
 def get_optimal_parameters(product, region, month, slope, intercept):
-    slope = slope * 2000 # lbs -> tons
-    intercept = intercept * 2000 # lbs -> tons 
+    slope = slope * 2000 # ($/lb) / (tons/week) -> ($/tons) / (tons/week)
+    intercept = intercept * 2000 # $/lb -> $/ton
 
     optimal_path = get_optimal_path(product, region, month)  
-    grove = optimal_path[0]
+    grove = optimal_path[0] 
     plant = optimal_path[1]
     storage = optimal_path[2]
     transporter = optimal_path[3]  
-    path_cost = optimal_path[4]     
+    path_cost = optimal_path[4] # $/ton     
     
     # solve derivative of quadratic for quantity/price
     quantity = (path_cost - intercept) / (2 * slope)
@@ -267,7 +267,7 @@ def get_optimal_parameters(product, region, month, slope, intercept):
     for i in range(1,13):
         col = month + str(i)
         price2 = past_points.loc[price_index, col] * 2000 # lbs -> tons
-        quantity2 = past_points.loc[quantity_index, col]
+        quantity2 = past_points.loc[quantity_index, col] #/ 4  # months -> weeks
         profit2 = quantity2 * (price2 - path_cost)
         
         if (profit2 > profit):
@@ -280,7 +280,7 @@ def get_optimal_parameters(product, region, month, slope, intercept):
     price = price / 2000 # tons -> lbs
     
     # debugging statement: see how many regions/months rely on previous data over demand curves
-    #print('Month: ' + month + ', Region: ' + region + ', Year Used = ' + str(year_used) + ', Price = ' + str(price))
+    print('Month: ' + month + ', Region: ' + region + ', Year Used = ' + str(year_used) + ', Price = ' + str(price))
 
     
     parameters = [product, region, month, grove, plant, storage, transporter, 
