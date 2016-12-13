@@ -121,12 +121,13 @@ FCOJ_past_points.drop('Unnamed: 1', inplace=True, axis=1)
 # -------------------------------------------------------------------------- #
 
 # track how full each plant/storage is in each month
-capacity = pandas.DataFrame(data = 0.0, index = (plants+storages), columns = months)
+capacity = pandas.DataFrame(data = 0.0, index = (plants+storages), columns = range(0,NUM_WEEKS))
 max_capacities = pandas.DataFrame(data = max_capacities, index = (plants+storages), columns = ['Max_Capacity'])
 
-# 336 rows of optimal parameters sorted by profit, iterate through until capacity filled
-list_indices = numpy.arange(len(products)*len(regions)*len(months))
-list_columns = ['Product', 'Region', 'Month', 'Grove', 'Plant', 'Storage', 'Transporter', 'Price', 'Path_Cost','Quantity', 'Profit']
+# 1344 rows of optimal parameters sorted by profit, iterate through until capacity filled
+NUM_WEEKS = 48
+list_indices = numpy.arange(len(products)*len(regions)*NUM_WEEKS)
+list_columns = ['Product', 'Region', 'Month', 'Week', 'Grove', 'Plant', 'Week_in_Plant', 'Storage', 'Transporter', 'Price', 'Path_Cost','Quantity', 'Profit', 'Year_Used']
 list_of_choices = pandas.DataFrame(index = list_indices, columns = list_columns)
 
 # Purchases at the Spot Market(tons per week in a month) (ORA)
@@ -194,21 +195,26 @@ def get_decisions():
     get_list_of_choices()
     locations = plants + storages
     
-    end = len(products) * len(regions) * len(months)
+    end = len(products) * len(regions) * NUM_WEEKS
     for i in range(0, end):
-        parameters = list_of_choices.iloc[i:i+1, 0:11]
+        parameters = list_of_choices.iloc[i:i+1, 0:14]
+        product = parameters.loc[i, 'Product']
+        week = parameters.loc[i, 'Week']
+        week_in_plant = parameters.loc[i, 'Week_in_Plant']
         month = parameters.loc[i, 'Month']
         price = parameters.loc[i, 'Price']
         path_cost = parameters.loc[i, 'Path_Cost']
         quantity = parameters.loc[i, 'Quantity']
         
+        # currently only checks products that are in plants (since plants have least capacity)
         for l in locations:
-            if (capacity.loc[l, month] + quantity > max_capacities.loc[l, 'Max_Capacity']):
-                quantity = max_capacities.loc[l, 'Max_Capacity'] - capacity.loc[l, month]
-                profit = quantity*(price*2000 - path_cost)
-                
-                parameters.loc[i, 'Quantity'] = quantity
-                parameters.loc[i, 'Profit'] = profit
+            if (product != 'ORA'):
+                if (capacity.loc[l, week_in_plant] + quantity > max_capacities.loc[l, 'Max_Capacity']):
+                    quantity = max_capacities.loc[l, 'Max_Capacity'] - capacity.loc[l, week_in_plant]
+                    profit = quantity*(price*2000 - path_cost)
+                    
+                    parameters.loc[i, 'Quantity'] = quantity
+                    parameters.loc[i, 'Profit'] = profit
                 
         
         if (quantity != 0):
@@ -226,25 +232,35 @@ def get_list_of_choices():
                 slope = get_slope(p, r, m)
                 intercept = get_intercept(p, r, m)
                 
-                parameters = get_optimal_parameters(p, r, m, slope, intercept)
+                start_week = months.index(m) * 4
+                for w in range(0,4):
+                    parameters = get_optimal_parameters(p, r, m, start_week + w, slope, intercept)
                 
-                list_of_choices.iloc[i:i+1, 0:11] = parameters
-                i = i+1
+                    list_of_choices.iloc[i:i+1, 0:14] = parameters
+                    i = i+1
+                    
+    interpolate_list_of_choices()
     list_of_choices.sort_values('Profit', ascending = False, inplace = True)
     list_of_choices.set_index(list_indices, inplace=True)
     
                     
 # return optimal path, price, and quantity for a product/region/month
-def get_optimal_parameters(product, region, month, slope, intercept):
+def get_optimal_parameters(product, region, month, week, slope, intercept):
     slope = slope * 2000 # ($/lb) / (tons/week) -> ($/tons) / (tons/week)
     intercept = intercept * 2000 # $/lb -> $/ton 
-
-    optimal_path = get_optimal_path(product, region, month)  
+    
+    purchase_week = get_week_of_purchase(week, product)
+    #print purchase_week
+    purchase_month = months[int(math.floor(purchase_week / 4.0))] # convert from week to month
+    optimal_path = get_optimal_path(product, region, purchase_month) # month only needed for grove purchasing
+    
     grove = optimal_path[0]
     plant = optimal_path[1]
     storage = optimal_path[2]
     transporter = optimal_path[3]  
     path_cost = optimal_path[4] # $/ton
+    
+    week_in_plant = get_week_in_plant(week, product)
     
     # solve derivative of quadratic for quantity/price
     quantity = (path_cost - intercept) / (2 * slope)
@@ -270,27 +286,27 @@ def get_optimal_parameters(product, region, month, slope, intercept):
     
     year_used = 2017
 
-    for i in range(1,13):
-        col = month + str(i)
-        price2 = past_points.loc[price_index, col] * 2000 # lbs -> tons
-        quantity2 = past_points.loc[quantity_index, col] / 4 # months -> weeks
-        profit2 = quantity2 * (price2 - path_cost)
-        
-        if (profit2 > profit):
-            price = price2
-            quantity = quantity2
-            profit = profit2    
-            year_used = 2005+i
+#    for i in range(1,13):
+#        col = month + str(i)
+#        price2 = past_points.loc[price_index, col] * 2000 # lbs -> tons
+#        quantity2 = past_points.loc[quantity_index, col] / 4 # months -> weeks
+#        profit2 = quantity2 * (price2 - path_cost)
+#        
+#        if (profit2 > profit):
+#            price = price2
+#            quantity = quantity2
+#            profit = profit2    
+#            year_used = 2005+i
 
         
     price = price / 2000 # tons -> lbs
     
     # debugging statement: see how many regions/months rely on previous data over demand curves
-    print('Product: ' + product + ', Month: ' + month + ', Region: ' + region + ', Year Used = ' + str(year_used) + ', Price = ' + str(price))
+    #print('Product: ' + product + ', Month: ' + month + ', Region: ' + region + ', Year Used = ' + str(year_used) + ', Price = ' + str(price))
 
     
-    parameters = [product, region, month, grove, plant, storage, transporter, 
-                  price, path_cost, quantity, profit]
+    parameters = [product, region, month, week, grove, plant, week_in_plant, storage,
+                  transporter, price, path_cost, quantity, profit, year_used]
     
     return parameters
 
@@ -315,6 +331,90 @@ def get_optimal_path(product, region, month):
             optimal_path = [g, plant, storage, transporter, total_cost]
             
     return optimal_path
+    
+# if a month is deemed unprofitable (Price = 4.0), check if surrounding months are profitable
+# if true, use average of two quantities and prices from each  
+def interpolate_list_of_choices():
+    l_o_c = list_of_choices
+    for p in products:
+        for r in regions:
+            for m in months:
+                
+                month_index = months.index(m)
+                specific_list = l_o_c[(l_o_c.Product == p) & (l_o_c.Region == r) & (l_o_c.Month == m)]
+                specific_weeks = list(specific_list.Week)
+                specific_path_cost = specific_list.Path_Cost.max()
+                                      
+                if (specific_list.Profit.sum() == 0): # entire month not profitable
+                    
+                    # check if month before was profitable
+                    month_before_index = month_index - 1
+                    if (month_before_index < 0):
+                        month_before_index = month_before_index + 12
+                    month_before = l_o_c[(l_o_c.Product == p) & (l_o_c.Region == r) & (l_o_c.Month == months[month_before_index])]
+                    
+                    # check if month after was profitable
+                    month_after_index = month_index + 1
+                    if (month_after_index > 11):
+                        month_after_index = month_after_index - 12
+                    month_after = l_o_c[(l_o_c.Product == p) & (l_o_c.Region == r) & (l_o_c.Month == months[month_after_index])]
+                                      
+                    if ((month_before.Profit.sum() > 0) & (month_after.Profit.sum() > 0)):
+                        print 'MAKE MONEY HERE'
+                        print 'Month: '+ m + ', Product: ' + p + ', Region: ' + r
+                        print 'Old_profits: ' + str(month_before.Profit.sum()) + ', ' + str(month_after.Profit.sum())
+                        new_quantity = ( month_before.Quantity.max() + month_after.Quantity.max() ) / 2
+                        new_price = ( month_before.Price.max() + month_after.Price.max() ) / 2
+                        new_profit = new_quantity * (new_price*2000 - specific_path_cost)
+                        print new_profit
+                    
+                        
+                    
+# return number of weeks total required to get product from grove to market
+def get_weeks_to_market(product):
+    if (product == 'ORA'):
+        return 2
+    elif (product == 'FCOJ' | product == 'POJ'):
+        return 4
+    else:
+        return 5
+        
+# return week that product is in processing plant
+def get_week_in_plant(demand_week, product):
+    if (product == 'ORA'):
+        return None
+    elif (product == 'POJ') | (product == 'FCOJ'):
+        plant_week =  demand_week - 3
+    elif (product == 'ROJ'):
+        plant_week  = demand_week - 4
+        
+    if (plant_week < 0):
+        plant_week = 48 + plant_week
+        
+    return plant_week
+    
+def get_week_in_storage(demand_week):
+    storage_week = demand_week - 1
+    
+    if (storage_week < 0):
+        storage_week = 48 + storage_week
+        
+    return storage_week
+        
+        
+# return week that product is purchased from grove
+def get_week_of_purchase(demand_week, product):
+    if (product == 'ORA'):
+        purchase_week = demand_week - 2
+    elif (product == 'POJ') | (product == 'FCOJ'):
+        purchase_week = demand_week - 4
+    elif (product == 'ROJ'):
+        purchase_week = demand_week - 5
+        
+    if (purchase_week < 0):
+        purchase_week = 48 + purchase_week
+        
+    return purchase_week
     
 # return closest storage to market region
 def get_closest_storage(region):
@@ -477,15 +577,18 @@ def update_decisions(parameters, i):
     product = parameters.loc[i, 'Product']
     region = parameters.loc[i, 'Region']
     month = parameters.loc[i, 'Month'] 
+    week = parameters.loc[i, 'Week']
     grove = parameters.loc[i, 'Grove']
     plant = parameters.loc[i, 'Plant']
+    week_in_plant = parameters.loc[i, 'Week_in_Plant']
     storage = parameters.loc[i, 'Storage']
     price = parameters.loc[i, 'Price']
     quantity = parameters.loc[i, 'Quantity']
     profit = parameters.loc[i, 'Profit']
         
-    update_capacity(quantity, product, month, plant, storage)
-    update_spot_purchases(quantity, month, grove)
+    
+    update_capacity(quantity, product, week, week_in_plant, plant, storage)
+    update_spot_purchases(product, quantity, week, grove) 
     update_shipping1(quantity, product, grove, plant, storage)
     update_manufacturing(quantity, product, plant)
     update_shipping2(quantity, product, plant, storage)
@@ -495,16 +598,26 @@ def update_decisions(parameters, i):
     update_quantities(quantity, product, region, month)
     update_total_profit(profit)
 
-# add quantities to plant/storage for each month
-def update_capacity(quantity, product, month, plant, storage):
-    if (plant != None):
-        capacity.loc[plant, month] = capacity.loc[plant, month] + quantity
+def update_capacity(quantity, product, week, week_in_plant, plant, storage):
+    if (product != 'ORA'):
+        update_capacity_plant(quantity, product, week_in_plant, plant)
         
-    capacity.loc[storage, month] = capacity.loc[storage, month] + quantity
+    week_in_storage = get_week_in_storage(week)
+    update_capacity_storage(quantity, product, week, storage)
+    
+# add quantities to plant for each month
+def update_capacity_plant(quantity, product, week_in_plant, plant):
+    if (plant != None):
+        capacity.loc[plant, week_in_plant] = capacity.loc[plant, week_in_plant] + quantity
+        
+def update_capacity_storage(quantity, product, week, storage):
+    capacity.loc[storage, week] = capacity.loc[storage, week] + quantity
     
 # add quantity to raw materials path
-def update_spot_purchases(quantity, month, grove):
-    spot_purchases.loc[grove, month] = spot_purchases.loc[grove, month] + quantity
+def update_spot_purchases(product, quantity, week, grove):
+    purchase_week = get_week_of_purchase(week, product)
+    purchase_month = months[int(math.floor(purchase_week / 4.0))]
+    spot_purchases.loc[grove, purchase_month] = spot_purchases.loc[grove, purchase_month] + quantity
     
 # add quantity to shipping1 path
 def update_shipping1(quantity, product, grove, plant, storage):
@@ -711,6 +824,7 @@ def update_earnings(parameters, i):
     product = parameters.loc[i, 'Product']
     region = parameters.loc[i, 'Region']
     month = parameters.loc[i, 'Month'] 
+    week = parameters.loc[i, 'Week']
     grove = parameters.loc[i, 'Grove']
     plant = parameters.loc[i, 'Plant']
     storage = parameters.loc[i, 'Storage']
@@ -757,14 +871,14 @@ def update_earnings(parameters, i):
     # Transportation Costs from Plants and Storages & Inventory Hold Costs
     # Transportation Costs from Plants (TankCars)
     if (plant != None):
-        if (capacity.loc[plant, month] < 300):
+        if (capacity.loc[plant, week] < 300):
             value = 36 * quantity/30 * P_S.loc[storage, plant]
             add_value_to_cell(value, earnings, 'Transportation Costs from Plants (TankCars)', 'Value')
             add_value_to_cell(value, earnings, 'Total Transportation and Storage Costs', 'Value')
     
     # Transportation Costs from Plants (Carriers)
     if (plant != None):
-        if (capacity.loc[plant, month] >= 300):
+        if (capacity.loc[plant, week] >= 300):
             value = .65 * quantity * P_S.loc[storage, plant]
             add_value_to_cell(value, earnings, 'Transportation Costs from Plants (Carriers)', 'Value')
             add_value_to_cell(value, earnings, 'Total Transportation and Storage Costs', 'Value')
@@ -787,7 +901,7 @@ def update_earnings(parameters, i):
 # -------------------------------------------------------------------------- #
 
 get_decisions()
-print(total_profit)
+print('total profit: ' + str(total_profit))
 
 #product = 'FCOJ'
 #region = 'NE'
